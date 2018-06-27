@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  var splits;
+  var buttons = ['a', 'b', 'z', 's', 'l', 'r', 'cl', 'cr', 'cu', 'cd', 'x', 'y'];
+  var socket = io();
+  var baseTime;
+  var running = false;
+  var mainRunning = false;
+  var finished = false;
+  var numFrames = 0;
+  var animationFrame;
+  var activeSplit = 0;
+  var curFrame = 0;
+  var mainFinished;
+  var lastFrame = true;
+  var fps = 0;
+  var lastFrameTime = undefined;
+  function updateFps(save) {
+    if (!running)
+      return;
+    var curTime = performance.now()
+    if (lastFrameTime === undefined) {
+      lastFrameTime = curTime;
+      return;
+    }
+    var frameTimeDiff = (curTime - lastFrameTime) / 1000;
+    if (!frameTimeDiff)
+      return;
+    var newfps = 1 / frameTimeDiff;
+    if (fps >= 1 && newfps >= fps * .5)
+      newfps = newfps * .2 + fps * .8;
+    if (save || newfps < fps)
+      document.getElementById('fps').innerText = zeroPad(newfps.toFixed(0), 2);
+    if (save) {
+      fps = newfps;
+      lastFrameTime = curTime;
+    }
+  }
+  socket.on('m64', function (msg) {
+    var el = document.getElementById('name');
+    msg = msg.split('.m64')[0];
+    el.innerHTML = msg;
+    var timer = document.getElementById('timer');
+    timer.className = '';
+    running = false;
+    finished = false;
+    splits = undefined;
+  });
+  socket.on('splits', function (msg) {
+    splits = msg;
+    drawSplits();
+  });
+  socket.on('numFrames', function (msg) {
+    var el = document.getElementById('nbFrames');
+    el.innerHTML = zeroPad(msg, 7);
+    numFrames = msg;
+    if (splits && !splits[splits.length - 1].end)
+      splits[splits.length - 1].end = numFrames;
+  });
+  socket.on('complete', function (msg) {
+    var timer = document.getElementById('timer');
+    timer.className = 'done';
+    running = false;
+    finished = true;
+    fillTimer();
+    lastFrame = true;
+  });
+  socket.on('paired', function (msg) {
+    lastFrameTime = undefined;
+    if (!splits || splits[0].time)
+      baseTime = performance.now() - msg;
+    else
+      baseTime = undefined;
+    var timer = document.getElementById('timer');
+    timer.className = '';
+    running = true;
+    finished = false;
+    fillTimer();
+  });
+  function zeroPad(s, n) {
+    s = s + '';
+    while (s.length < n)
+      s = '0' + s;
+    return s;
+  }
+  function formatJoy(v) {
+    if (!v)
+      return "000";
+    else if (v > 127)
+      return "-" + zeroPad((-(v - 256)).toString(16), 2);
+    else
+      return "+" + zeroPad(v.toString(16), 2);
+  }
+  function removeAllChildren(node) {
+    while (node.hasChildNodes()) {
+      node.removeChild(node.lastChild);
+    }
+  }
+  function formatTime(delta) {
+    delta = ((delta / 10) | 0) / 100;
+    var hours = (delta / 60 / 60) | 0;
+    var minutes = (delta / 60 % 60) | 0;
+    var seconds = (delta % 60);
+
+    return zeroPad(hours, 2) + ':' + zeroPad(minutes, 2) + ':' + zeroPad(seconds.toFixed(2), 5);
+  }
+  function drawSplits(currentTime) {
+    var table = document.getElementById('splits');
+    if (!splits) {
+      table.className = 'hidden';
+      return;
+    } else {
+      table.className = '';
+    }
+    var tbody = document.querySelector('#splits tbody');
+    removeAllChildren(tbody);
+    for (var i = 0; splits && i < splits.length; i++) {
+      var split = splits[i];
+      var tr = document.createElement('tr');
+      var nameTd = document.createElement('td');
+      nameTd.innerHTML = split.name;
+      tr.appendChild(nameTd);
+      var endFrameTd = document.createElement('td');
+      endFrameTd.innerHTML = zeroPad(split.end, 7);
+      tr.appendChild(endFrameTd);
+      var endTimeTd = document.createElement('td');
+      if (curFrame >= split.end) {
+        split.complete = true;
+        if (!split.endTime)
+          split.endTime = currentTime;
+        activeSplit = i + 1;
+      }
+      if (activeSplit >= i && (running || finished)) {
+        if (!split.startTime) {
+          split.startTime = currentTime;
+        }
+
+        var endTime = split.endTime || currentTime;
+        endTimeTd.innerHTML = formatTime(endTime - split.startTime);
+      } else {
+        endTimeTd.innerHTML = '--:--:--.--';
+      }
+      if (activeSplit == i && running) {
+        mainRunning = split.time;
+        if (split.time && !baseTime)
+          baseTime = currentTime;
+        lastFrame = false;
+        tr.className = 'running';
+      } else if (split.complete) {
+        tr.className = 'finished';
+      }
+      tr.appendChild(endTimeTd);
+      tbody.appendChild(tr);
+    }
+    if (splits && activeSplit == splits.length) {
+      mainRunning = false;
+      mainFinished = true;
+    } else if (splits) {
+      mainFinished = false;
+    }
+  }
+  function fillTimer() {
+    updateFps(false);
+
+    var timer = document.getElementById('timer');
+
+    var currentTime = performance.now();
+
+    drawSplits(currentTime);
+
+    if (!splits || mainRunning || (!lastFrame && mainFinished)) {
+      var delta = currentTime - baseTime;
+      timer.innerHTML = formatTime(delta);
+      if (splits && mainFinished) {
+        timer.className = 'done';
+        lastFrame = true;
+      } else if (splits) {
+        timer.className = '';
+      }
+    } else if (!finished && !mainRunning) {
+      timer.innerHTML = '--:--:--.--';
+    }
+
+    cancelAnimationFrame(animationFrame);
+
+    if (running)
+      animationFrame = requestAnimationFrame(fillTimer);
+  }
+  socket.on('input', function (msg) {
+    updateFps(true);
+    var percentEl = document.getElementById('percent');
+    var frameEl = document.getElementById('frame');
+    curFrame = msg.nb;
+    running = true;
+    finished = false;
+    var buttonStr = "";
+    for (var i = 0; i < buttons.length; i++) {
+      var el = document.getElementById(buttons[i]);
+      el.className = msg[buttons[i]] ? 'on' : 'off';
+      if (buttons[i] == 'x' || buttons[i] == 'y') {
+        el.innerHTML = formatJoy(msg[buttons[i]]);
+      }
+    }
+    frameEl.innerHTML = zeroPad(msg.nb, 7);
+    percentEl.innerHTML = zeroPad(Math.floor(msg.nb / numFrames * 100), 3);
+    fillTimer();
+  });
+  var logLines = [];
+  socket.on('log', function (msg) {
+    logLines.push(msg);
+    if (logLines.length > 6)
+      logLines.shift();
+    var logEl = document.getElementById('log');
+    removeAllChildren(logEl);
+    for (var i = 0; i < logLines.length; i++) {
+      var msgEl = document.createElement('span');
+      msgEl.innerText = logLines[i].line;
+      msgEl.className = logLines[i].level;
+      logEl.appendChild(msgEl);
+      var brEl = document.createElement('br');
+      logEl.appendChild(brEl);
+    }
+  });
+</script>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    background-color: rgba(0, 0, 0, 0);
+    overflow: hidden;
+    color: white;
+    font-family: Menlo;
+    font-size: 15vh;
+  }
+  #top {
+    color: #7FFFD4;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    text-align: center;
+    line-height: 18vh;
+    white-space: nowrap;
+  }
+  #frame, #nbFrames, #percent {
+    color: red;
+  }
+  #inputs {
+    color: #6441A5;
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    text-align: center;
+    line-height: 17vh;
+  }
+  #x, #y {
+    color: white;
+  }
+  #inputs>span {
+    color: white;
+  }
+  #inputs>span.on {
+    color: red;
+  }
+  #timer {
+    color: #6441A5;
+    font-family: "Digital-7 Mono";
+    position:absolute;
+    bottom: 0;
+    font-size: 100vh;
+    width: 100%;
+    text-align: center;
+  }
+  #timer.done {
+    color: #7FFF00;
+  }
+  #main {
+    width: 800px;
+    position: absolute;
+    left: 0;
+    height: 100%;
+  }
+  #right {
+    box-sizing: border-box;
+    width: 480px;
+    position: absolute;
+    right: 0;
+    height: 100%;
+  }
+  #splits {
+    width: 100%;
+  }
+  #splits.hidden {
+    display: none;
+  }
+  #splits>table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  #splits th, #splits td {
+    border-left: 1px solid white;
+    border-bottom: 1px solid grey;
+    text-align: center;
+  }
+  #splits tfoot td {
+    height: 1000px;
+  }
+  #splits tr.finished {
+    color: green;
+  }
+  #splits tr.running {
+    color: yellow;
+  }
+  #splits tr td:nth-of-type(1) {
+    text-align: left;
+  }
+  #log {
+    width: 100%;
+    white-space: pre-wrap;
+  }
+  #log span.warn {
+    color: yellow;
+  }
+  #log span.error {
+    color: red;
+  }
+</style>
+<div id="main">
+<div id="top"><span id="name">NO FILE</span> - F:<span id="frame">0000000</span>/<span id="nbFrames">0000000</span> (<span id="percent">000</span>%)</div>
+<div id="inputs">X:<span id="x">000</span> Y:<span id="y">000</span>
+  <span id="a">A</span> <span id="b">B</span>
+  <span id="z">Z</span> <span id="s">S</span>
+  <span id="l">L</span> <span id="r">R</span>
+  <span id="cl">c←</span> <span id="cr">c→</span>
+  <span id="cu">c↑</span> <span id="cd">c↓</span>
+  FPS:<span id="fps">00</span>
+</div>
+<div id="timer">--:--:--.--</div>
+</div>
+<div id="right">
+  <div id="splits">
+    <table>
+      <colgroup>
+        <col style="width:42%;">
+        <col style="width:26%;">
+        <col style="width:32%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>End Frame</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+      <!--<tfoot>
+        <tr>
+          <td></td>
+          <td></td>
+          <td></td>
+        </tr>
+      </tfoot>-->
+    </table>
+  </div>
+  <pre id="log"></pre>
+</div>
