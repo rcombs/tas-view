@@ -12,10 +12,50 @@ var SerialPort = require('serialport'),
 const EventEmitter = require('events');
 class BotEmitter extends EventEmitter {}
 const bot = new BotEmitter();
+var twitch;
 
 var dstPath;
 
 var startupString = '';
+
+const consoles = {
+  n64: {
+    frameSize: 4,
+    buttons: {
+      a: '80000000',
+      b: '40000000',
+      z: '20000000',
+      start: '10000000',
+      s: 'start',
+      right: '01000000',
+      left:  '02000000',
+      down:  '04000000',
+      up:    '08000000',
+      dr: 'right',
+      dl: 'left',
+      dd: 'down',
+      du: 'up',
+      r: '00100000',
+      l: '00200000',
+      cright: '00010000',
+      cleft:  '00020000',
+      cdown:  '00040000',
+      cup:    '00080000',
+      cr: 'cright',
+      cl: 'cleft',
+      cd: 'cdown',
+      cu: 'cup',
+    },
+    sticks: {
+      '': {
+        up: '0000007F'
+        down: '00000080'
+        left: '00008000'
+        right: '00007F00'
+      }
+    }
+  }
+};
 
 const argv = yargs.option('serial', {
   alias: 's',
@@ -26,6 +66,9 @@ const argv = yargs.option('serial', {
 }).option('port', {
   alias: 'p',
   default: 3939
+}).option('console', {
+  alias: 'c',
+  default: 'n64'
 }).command('upload <srcFile> [dstPath]', 'send a file', (yargs) => {
   yargs.positional('srcFile', {
     describe: 'file to upload',
@@ -44,6 +87,8 @@ const argv = yargs.option('serial', {
   });
 }, (argv) => {
   startupString += 'L:' + argv.path + '\n';
+}).command('twitch', 'run twitch bot', (yargs) => {
+  twitch = require('./twitch.js');
 }).command(['run [files..]', '*'], 'run one or more TAS files', (yargs) => {
   yargs.positional('files', {
     describe: 'TAS files to run',
@@ -79,6 +124,11 @@ app.get('/', function (req, res) {
 var sp = new SerialPort(argv.serial, {
   baudRate: argv.baudRate,
 });
+
+if (twitch) {
+  twitch.setConsole(consoles[argv.console]);
+  twitch.setPort(sp);
+}
 
 var parser = sp.pipe(new Readline({delimeter: '\n'}));
 
