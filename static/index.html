@@ -12,8 +12,8 @@
   var animationFrame;
   var activeSplit = 0;
   var curFrame = 0;
-  var mainFinished;
-  var lastFrame = true;
+  var mainFinished = false;
+  var lastFrame = false;
   var fps = 0;
   var lastFrameTime = undefined;
   function updateFps(save) {
@@ -44,8 +44,9 @@
     var timer = document.getElementById('timer');
     timer.className = '';
     running = false;
-    finished = false;
-    splits = undefined;
+    lastFrame = finished = false;
+    mainFinished = mainRunning = false;
+    activeSplit = 0;
   });
   socket.on('splits', function (msg) {
     splits = msg;
@@ -76,7 +77,7 @@
     timer.className = '';
     running = true;
     finished = false;
-    fillTimer();
+    fillTimer(0);
   });
   function zeroPad(s, n) {
     s = s + '';
@@ -160,18 +161,24 @@
       mainFinished = false;
     }
   }
-  function fillTimer() {
+
+  var lastDelta = 0;
+
+  function fillTimer(time) {
     updateFps(false);
 
     var timer = document.getElementById('timer');
 
     var currentTime = performance.now();
+    if (time === undefined)
+      time = currentTime + lastDelta;
+    else
+      lastDelta = time - currentTime;
 
-    drawSplits(currentTime);
+    drawSplits(time);
 
-    if (!splits || mainRunning || (!lastFrame && mainFinished)) {
-      var delta = currentTime - baseTime;
-      timer.innerHTML = formatTime(delta);
+    if ((!splits && !lastFrame) || mainRunning || (!lastFrame && mainFinished)) {
+      timer.innerHTML = formatTime(time);
       if (splits && mainFinished) {
         timer.className = 'done';
         lastFrame = true;
@@ -185,15 +192,15 @@
     cancelAnimationFrame(animationFrame);
 
     if (running)
-      animationFrame = requestAnimationFrame(fillTimer);
+      animationFrame = requestAnimationFrame(function (){ fillTimer(); });
   }
   socket.on('input', function (msg) {
     updateFps(true);
     var percentEl = document.getElementById('percent');
     var frameEl = document.getElementById('frame');
+    var viEl = document.getElementById('vi');
     curFrame = msg.nb;
     running = true;
-    finished = false;
     var buttonStr = "";
     for (var i = 0; i < buttons.length; i++) {
       var el = document.getElementById(buttons[i]);
@@ -203,8 +210,9 @@
       }
     }
     frameEl.innerHTML = zeroPad(msg.nb, 7);
+    viEl.innerHTML = zeroPad(msg.vi, 7);
     percentEl.innerHTML = zeroPad(Math.floor(msg.nb / numFrames * 100), 3);
-    fillTimer();
+    fillTimer(msg.time * 1000);
   });
   var logLines = [];
   socket.on('log', function (msg) {
@@ -244,7 +252,7 @@
     line-height: 18vh;
     white-space: nowrap;
   }
-  #frame, #nbFrames, #percent {
+  #frame, #nbFrames, #percent, #vi {
     color: red;
   }
   #inputs {
@@ -328,7 +336,7 @@
   }
 </style>
 <div id="main">
-<div id="top"><span id="name">NO FILE</span> - F:<span id="frame">0000000</span>/<span id="nbFrames">0000000</span> (<span id="percent">000</span>%)</div>
+<div id="top"><span id="name">NO FILE</span> - F:<span id="frame">0000000</span>/<span id="nbFrames">0000000</span> (<span id="percent">000</span>%) VI:<span id="vi">0000000</span></div>
 <div id="inputs">X:<span id="x">000</span> Y:<span id="y">000</span>
   <span id="a">A</span> <span id="b">B</span>
   <span id="z">Z</span> <span id="s">S</span>
