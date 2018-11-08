@@ -20,6 +20,7 @@ var startupString = '';
 
 const consoles = {
   n64: {
+    name: 'N64',
     frameSize: 4,
     buttons: {
       a: '80000000',
@@ -48,18 +49,42 @@ const consoles = {
     },
     sticks: {
       '': {
-        up: '0000007F'
-        down: '00000080'
-        left: '00008000'
-        right: '00007F00'
+        up: '0000007F',
+        down: '00000080',
+        left: '00008000',
+        right: '00007F00',
       }
+    }
+  },
+  snes: {
+    name: 'SNES',
+    frameSize: 2,
+    buttons: {
+      a: '0080',
+      b: '8000',
+      x: '0040',
+      y: '4000',
+      start: '1000',
+      select: '2000',
+      s: 'start',
+      sl: 'select',
+      l: '0020',
+      r: '0010',
+      right: '0100',
+      left:  '0200',
+      down:  '0400',
+      up:    '0800',
+      dr: 'right',
+      dl: 'left',
+      dd: 'down',
+      du: 'up',
     }
   }
 };
 
 const argv = yargs.option('serial', {
   alias: 's',
-  default: '/dev/cu.usbmodem4403591'
+  default: '/dev/cu.usbmodem4403590'
 }).option('baudRate', {
   alias: 'b',
   default: 115200
@@ -89,6 +114,19 @@ const argv = yargs.option('serial', {
   startupString += 'L:' + argv.path + '\n';
 }).command('twitch', 'run twitch bot', (yargs) => {
   twitch = require('./twitch.js');
+  yargs.option('repeatRate', {
+    alias: 'f',
+    default: 20
+  }).option('repeatFrames', {
+    alias: 'd',
+    default: 3
+  }).option('maxRepeat', {
+    alias: 'r',
+    default: 10
+  }).option('maxHold', {
+    alias: 'h',
+    default: 0
+  });
 }).command(['run [files..]', '*'], 'run one or more TAS files', (yargs) => {
   yargs.positional('files', {
     describe: 'TAS files to run',
@@ -105,7 +143,7 @@ const argv = yargs.option('serial', {
     alias: 'n',
     default: 6 * 60 * 1000,
   }).option('crash-timeout', {
-    alias: 'c',
+    alias: 't',
     default: 60 * 1000,
   });
 }, (argv) => {
@@ -118,17 +156,22 @@ server.listen(argv.port);
 const {performance} = require('perf_hooks');
 
 app.get('/', function (req, res) {
-  res.sendFile(__dirname + '/index.html');
+  res.sendFile(__dirname + '/static/index.html');
 });
+
+app.use(express.static(__dirname + '/static'));
 
 var sp = new SerialPort(argv.serial, {
   baudRate: argv.baudRate,
 });
 
-if (twitch) {
-  twitch.setConsole(consoles[argv.console]);
-  twitch.setPort(sp);
-}
+if (twitch)
+  twitch.setConfig({
+    console: consoles[argv.console],
+    sp: sp,
+    log: log,
+    argv: argv
+  });
 
 var parser = sp.pipe(new Readline({delimeter: '\n'}));
 
@@ -186,10 +229,12 @@ function openFile(file) {
   sp.write('M:' + file + '\n');
 }
 
-var powerPin = 23;
+function power(on) {
+  sp.write('PW:' + (on ? 1 : 0) + ':' + argv.powerPin + '\n');
+}
 
 function loadNext() {
-  sp.write('PM:O:' + powerPin + '\nDW:0:' + powerPin + '\n');
+  power(false);
   var next = chooseFile();
   if (!next) {
     console.log('Finished running all files');
@@ -223,6 +268,7 @@ function readChunk() {
 
 sp.on('open', function () {
   console.log('SP opened');
+  sp.write('SC:' + consoles[argv.console].name + '\n');
   if (startupString)
     sp.write(startupString);
   if (dstPath) {
@@ -230,35 +276,63 @@ sp.on('open', function () {
     sp.write('CR:' + dstPath + '\n');
   } else if (argv.files) {
     loadNext();
+  } else if (twitch) {
+    power(true);
   }
 });
 
 function parseDat(dat) {
   var arr = dat.split(' ');
   var obj = {
-    nb: parseInt(arr[0], 10)
+    nb: parseInt(arr[0], 10),
+    time: parseFloat(arr[1]),
+    vi: parseInt(arr[2], 10)
   };
-  arr = arr.slice(1).map(function (x) {return parseInt(x, 16)});
 
-  obj.cr = !!(arr[1] & 0x01);
-  obj.cl = !!(arr[1] & 0x02);
-  obj.cd = !!(arr[1] & 0x04);
-  obj.cu = !!(arr[1] & 0x08);
-  obj.r  = !!(arr[1] & 0x10);
-  obj.l  = !!(arr[1] & 0x20);
+  arr = arr.slice(3).map(function (x) {return parseInt(x, 16)});
 
-  obj.dr = !!(arr[0] & 0x01);
-  obj.dl = !!(arr[0] & 0x02);
-  obj.dd = !!(arr[0] & 0x04);
-  obj.du = !!(arr[0] & 0x08);
+  if (argv.console == 'n64') {
+      obj.cr = !!(arr[1] & 0x01);
+      obj.cl = !!(arr[1] & 0x02);
+      obj.cd = !!(arr[1] & 0x04);
+      obj.cu = !!(arr[1] & 0x08);
+      obj.r  = !!(arr[1] & 0x10);
+      obj.l  = !!(arr[1] & 0x20);
 
-  obj.s  = !!(arr[0] & 0x10);
-  obj.z  = !!(arr[0] & 0x20);
-  obj.b  = !!(arr[0] & 0x40);
-  obj.a  = !!(arr[0] & 0x80);
+      obj.dr = !!(arr[0] & 0x01);
+      obj.dl = !!(arr[0] & 0x02);
+      obj.dd = !!(arr[0] & 0x04);
+      obj.du = !!(arr[0] & 0x08);
 
-  obj.x = arr[2];
-  obj.y = arr[3];
+      obj.s  = !!(arr[0] & 0x10);
+      obj.z  = !!(arr[0] & 0x20);
+      obj.b  = !!(arr[0] & 0x40);
+      obj.a  = !!(arr[0] & 0x80);
+
+      obj.x = arr[2];
+      obj.y = arr[3];
+
+      obj.se = false;
+  } else if (argv.console == 'snes') {
+      obj.a = !!(arr[1] & 0x80);
+      obj.b = !!(arr[0] & 0x80);
+      obj.x = !!(arr[1] & 0x80);
+      obj.y = !!(arr[0] & 0x80);
+
+      obj.s = !!(arr[0] & 0x10);
+      obj.sl = !!(arr[0] & 0x20);
+
+      obj.l = !!(arr[1] & 0x20);
+      obj.r = !!(arr[1] & 0x10);
+
+      obj.dr = !!(arr[0] & 0x01);
+      obj.dl = !!(arr[0] & 0x02);
+      obj.dd = !!(arr[0] & 0x04);
+      obj.du = !!(arr[0] & 0x08);
+
+      obj.cl = ob.cr = ob.cu = ob.cd = false;
+      obj.z = false;
+  }
 
   return obj;
 }
@@ -270,10 +344,9 @@ var numFrames;
 io.on('connection', function (socket) {
   socket.join('inputs');
   console.log('socket connected');
-  if (splits)
-    socket.emit('splits', splits);
   if (m64)
     socket.emit('m64', m64);
+  socket.emit('splits', splits);
   if (numFrames)
     socket.emit('numFrames', numFrames);
   if (startTime)
@@ -302,7 +375,7 @@ bot.on('F', (data) => {
   if (crashTimeout)
     clearTimeout(crashTimeout);
   lastInputTime = performance.now();
-  if (dstPath)
+  if (!argv.files)
     return;
   crashTimeout = setTimeout(function () {
     console.log('Assuming crash; loading next');
@@ -316,12 +389,11 @@ bot.on('F', (data) => {
     data = data.substr(1);
   io.to('inputs').emit('m64', data);
   m64 = data;
+  splits = undefined;
   try {
     splits = require('./' + data + '.json');
     console.log('Loaded splits');
-  } catch (e) {
-    splits = undefined;
-  }
+  } catch (e) {}
   io.to('inputs').emit('splits', splits);
 }).on('N', (data) => {
   console.log('N:' + data);
@@ -330,7 +402,7 @@ bot.on('F', (data) => {
   if (desyncTimeout)
     clearTimeout(desyncTimeout);
   setTimeout(() => {
-    sp.write('PM:O:' + powerPin + '\nDW:1:' + powerPin + '\n');
+    power(true);
     running = true;
   }, 1000);
 }).on('C', (data) => {
@@ -343,7 +415,7 @@ bot.on('F', (data) => {
     clearTimeout(desyncTimeout);
   startTime = undefined;
 }).on('P', (data) => {
-  log('log', 'Paired');
+  log('log', 'Paired, VI: ' + data);
   startTime = performance.now();
   io.to('inputs').emit('paired', 0);
   if (desyncTimeout)
