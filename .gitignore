@@ -1,0 +1,3 @@
+*.M64.json
+node_modules
+twitch-config.json
