@@ -141,7 +141,7 @@ const argv = yargs.option('serial', {
     boolean: true
   }).option('next-timeout', {
     alias: 'n',
-    default: 6 * 60 * 1000,
+    default: 10 * 1000,
   }).option('crash-timeout', {
     alias: 't',
     default: 60 * 1000,
@@ -281,6 +281,8 @@ sp.on('open', function () {
   }
 });
 
+var currentVI = 0;
+
 function parseDat(dat) {
   var arr = dat.split(' ');
   var obj = {
@@ -288,6 +290,11 @@ function parseDat(dat) {
     time: parseFloat(arr[1]),
     vi: parseInt(arr[2], 10)
   };
+
+  if (obj.vi != currentVI + 2 && obj.vi && obj.nb > 1)
+    console.log('LAG: %i %i', obj.nb, obj.vi - currentVI);
+
+  currentVI = obj.vi;
 
   arr = arr.slice(3).map(function (x) {return parseInt(x, 16)});
 
@@ -371,7 +378,8 @@ var crashTimeout, desyncTimeout;
 var lastInputTime = 0;
 
 bot.on('F', (data) => {
-  io.to('inputs').emit('input', parseDat(data));
+  if (running)
+    io.to('inputs').emit('input', parseDat(data));
   if (crashTimeout)
     clearTimeout(crashTimeout);
   lastInputTime = performance.now();
@@ -407,6 +415,7 @@ bot.on('F', (data) => {
   }, 1000);
 }).on('C', (data) => {
   console.log('Complete');
+  running = false;
   io.to('inputs').emit('complete', data);
   setTimeout(loadNext, ranClear ? 0 : argv.nextTimeout);
   if (crashTimeout)
