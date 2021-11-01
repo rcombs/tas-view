@@ -16,25 +16,33 @@
   var lastFrame = false;
   var fps = 0;
   var lastFrameTime = undefined;
-  function updateFps(save) {
+  var lastFrameJSTime = undefined;
+  function updateFps(time) {
     if (!running)
       return;
-    var curTime = performance.now()
-    if (lastFrameTime === undefined) {
-      lastFrameTime = curTime;
-      return;
+    var curTime = performance.now() / 1000;
+    if (lastFrameJSTime === undefined) {
+      lastFrameJSTime = curTime;
+      if (!time)
+        return;
     }
-    var frameTimeDiff = (curTime - lastFrameTime) / 1000;
+    if (lastFrameTime === undefined) {
+      lastFrameTime = time;
+      if (time)
+        return;
+    }
+    var frameTimeDiff = (time ? (time - lastFrameTime) : (curTime - lastFrameJSTime));
     if (!frameTimeDiff)
       return;
     var newfps = 1 / frameTimeDiff;
     if (fps >= 1 && newfps >= fps * .5)
       newfps = newfps * .2 + fps * .8;
-    if (save || newfps < fps)
+    if (time || newfps < fps)
       document.getElementById('fps').innerText = zeroPad(newfps.toFixed(0), 2);
-    if (save) {
+    if (time) {
       fps = newfps;
-      lastFrameTime = curTime;
+      lastFrameTime = time;
+      lastFrameJSTime = curTime;
     }
   }
   socket.on('m64', function (msg) {
@@ -165,7 +173,7 @@
   var lastDelta = 0;
 
   function fillTimer(time) {
-    updateFps(false);
+    updateFps();
 
     var timer = document.getElementById('timer');
 
@@ -195,7 +203,7 @@
       animationFrame = requestAnimationFrame(function (){ fillTimer(); });
   }
   socket.on('input', function (msg) {
-    updateFps(true);
+    updateFps(msg.time);
     var percentEl = document.getElementById('percent');
     var frameEl = document.getElementById('frame');
     var viEl = document.getElementById('vi');
