@@ -108,11 +108,15 @@
   }
   function formatTime(delta) {
     delta = ((delta / 10) | 0) / 100;
-    var hours = (delta / 60 / 60) | 0;
+    var days = (delta / 60 / 60 / 24) | 0;
+    var hours = (delta / 60 / 60 % 24) | 0;
     var minutes = (delta / 60 % 60) | 0;
     var seconds = (delta % 60);
 
-    return zeroPad(hours, 2) + ':' + zeroPad(minutes, 2) + ':' + zeroPad(seconds.toFixed(2), 5);
+    var time = zeroPad(hours, 2) + ':' + zeroPad(minutes, 2) + ':' + zeroPad(seconds.toFixed(2), 5);
+    if (days > 0)
+      time = zeroPad(days, 2) + ':' + time;
+    return time;
   }
   function drawSplits(currentTime) {
     var table = document.getElementById('splits');
@@ -187,13 +191,19 @@
 
     if ((!splits && !lastFrame) || mainRunning || (!lastFrame && mainFinished)) {
       timer.innerHTML = formatTime(time);
+      if (timer.innerHTML.length > 11) {
+        timer.classList.add('hasDays');
+      } else {
+        timer.classList.remove('hasDays');
+      }
       if (splits && mainFinished) {
-        timer.className = 'done';
+        timer.classList.add('done');
         lastFrame = true;
       } else if (splits) {
-        timer.className = '';
+        timer.classList.remove('done');
       }
     } else if (!finished && !mainRunning) {
+      timer.classList.remove('done');
       timer.innerHTML = '--:--:--.--';
     }
 
@@ -217,8 +227,8 @@
         el.innerHTML = formatJoy(msg[buttons[i]]);
       }
     }
-    frameEl.innerHTML = zeroPad(msg.nb, 7);
-    viEl.innerHTML = zeroPad(msg.vi, 7);
+    frameEl.innerHTML = zeroPad(msg.nb, Math.max(numFrames.toString().length, 7));
+    viEl.innerHTML = zeroPad(msg.vi, Math.max((numFrames * 2).toString().length, 7));
     percentEl.innerHTML = zeroPad(Math.floor(msg.nb / numFrames * 100), 3);
     fillTimer(msg.time * 1000);
   });
@@ -284,10 +294,14 @@
     color: #6441A5;
     font-family: "Digital-7 Mono";
     position:absolute;
-    bottom: 0;
+    bottom: -1vh;
     font-size: 100vh;
     width: 100%;
     text-align: center;
+  }
+  #timer.hasDays {
+    font-size: 82vh;
+    bottom: 8vh;
   }
   #timer.done {
     color: #7FFF00;
