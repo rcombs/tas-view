@@ -127,7 +127,7 @@ const argv = yargs.option('serial', {
     alias: 'h',
     default: 0
   });
-}).command(['run [files..]', '*'], 'run one or more TAS files', (yargs) => {
+}).command(['run [files..]'], 'run one or more TAS files', (yargs) => {
   yargs.positional('files', {
     describe: 'TAS files to run',
     default: ['120-2012.m64']
@@ -287,11 +287,12 @@ sp.on('open', function () {
 var currentVI = 0;
 
 function parseDat(dat) {
-  var arr = dat.split(' ');
+  dat = dat.split(' ');
+  var pos = 5;
   var obj = {
-    nb: parseInt(arr[0], 10),
-    time: parseFloat(arr[1]),
-    vi: parseInt(arr[2], 10)
+    nb: parseInt(dat[0], 10),
+    time: parseFloat(dat[1]),
+    vi: parseInt(dat[2], 10)
   };
 
   if (obj.vi != currentVI + 2 && obj.vi && obj.nb > 1)
@@ -299,7 +300,7 @@ function parseDat(dat) {
 
   currentVI = obj.vi;
 
-  arr = arr.slice(3).map(function (x) {return parseInt(x, 16)});
+  var arr = dat.slice(3).map(function (x) {return parseInt(x, 16)});
 
   if (argv.console == 'n64') {
       obj.cr = !!(arr[1] & 0x01);
@@ -323,6 +324,8 @@ function parseDat(dat) {
       obj.y = arr[3];
 
       obj.se = false;
+
+      pos += 2;
   } else if (argv.console == 'snes') {
       obj.a = !!(arr[1] & 0x80);
       obj.b = !!(arr[0] & 0x80);
@@ -343,6 +346,11 @@ function parseDat(dat) {
       obj.cl = ob.cr = ob.cu = ob.cd = false;
       obj.z = false;
   }
+
+  numFrames = parseInt(dat[pos], 10) || numFrames;
+  if (dat[pos + 1] != '0')
+    console.log('OVERFLOW!');
+  m64 = dat.slice(pos + 2).join(' ') || m64;
 
   return obj;
 }
@@ -381,8 +389,7 @@ var crashTimeout, desyncTimeout;
 var lastInputTime = 0;
 
 bot.on('F', (data) => {
-  if (running)
-    io.to('inputs').emit('input', parseDat(data));
+  io.to('inputs').emit('input', parseDat(data));
   if (crashTimeout)
     clearTimeout(crashTimeout);
   lastInputTime = performance.now();
@@ -420,7 +427,8 @@ bot.on('F', (data) => {
   console.log('Complete');
   running = false;
   io.to('inputs').emit('complete', data);
-  setTimeout(loadNext, ranClear ? 0 : argv.nextTimeout);
+  if (argv.files)
+    setTimeout(loadNext, ranClear ? 0 : argv.nextTimeout);
   if (crashTimeout)
     clearTimeout(crashTimeout);
   if (desyncTimeout)
