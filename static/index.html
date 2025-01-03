@@ -142,6 +142,8 @@
         split.complete = true;
         if (!split.endTime)
           split.endTime = currentTime;
+        if (split.time)
+          mainFinished = true;
         activeSplit = i + 1;
       }
       if (activeSplit >= i && (running || finished)) {
@@ -169,8 +171,6 @@
     if (splits && activeSplit == splits.length) {
       mainRunning = false;
       mainFinished = true;
-    } else if (splits) {
-      mainFinished = false;
     }
   }
 
