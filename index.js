@@ -258,15 +258,16 @@ var file;
 var totalBytesRead = 0;
 
 function readChunk() {
-  var fileBuffer = Buffer.alloc(100);
-  var bytesRead = fs.read(file, fileBuffer, 0, 100, null, function (err, bytesRead, buffer) {
+  var fileBuffer = Buffer.alloc(1024);
+  var bytesRead = fs.read(file, fileBuffer, 0, 1024, null, function (err, bytesRead, buffer) {
     if (err) {
       console.log(err);
       throw err;
     }
     if (bytesRead) {
+      if ((totalBytesRead % 10240) == 0)
+        console.log(`Read chunk: ${totalBytesRead}`);
       totalBytesRead += bytesRead;
-      console.log(`Read chunk: ${totalBytesRead}`);
       sp.write('AP:' + buffer.toString('hex', 0, bytesRead) + '\n');
     } else {
       console.log('Finished writing');
