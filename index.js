@@ -431,7 +431,7 @@ bot.on('F', (data) => {
     running = true;
   }, 1000);
 }).on('C', (data) => {
-  console.log('Complete');
+  console.log('Complete: ' + data);
   running = false;
   io.to('inputs').emit('complete', data);
   if (argv.files)
