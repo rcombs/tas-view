@@ -112,6 +112,19 @@ const argv = yargs.option('serial', {
   });
 }, (argv) => {
   startupString += 'L:' + argv.path + '\n';
+}).command(['power [state]'], 'set console power', (yargs) => {
+  yargs.positional('state', {
+    describe: 'power state to set',
+    default: 'on'
+  });
+}, (argv) => {
+  startupString += 'PW:' + (argv.state != 'off' ? 1 : 0) + ':' + argv.powerPin + '\n';
+}).command(['eeprom <content>'], 'set EEPROM contents', (yargs) => {
+  yargs.positional('content', {
+    describe: 'EEPROM content to write',
+  });
+}, (argv) => {
+  startupString += 'WN:' + argv.content + '\n';
 }).command('twitch', 'run twitch bot', (yargs) => {
   twitch = require('./twitch.js');
   yargs.option('repeatRate', {
