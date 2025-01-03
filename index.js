@@ -1,11 +1,11 @@
 #! /usr/bin/env node
 
-var SerialPort = require('serialport'),
-    fs = require('fs'),
+const { SerialPort, ReadlineParser } = require('serialport')
+
+var fs = require('fs'),
     express = require('express'),
     http = require('http'),
     socketio = require('socket.io'),
-    Readline = require('@serialport/parser-readline'),
     yargs = require('yargs'),
     path = require('path');
 
@@ -161,7 +161,8 @@ app.get('/', function (req, res) {
 
 app.use(express.static(__dirname + '/static'));
 
-var sp = new SerialPort(argv.serial, {
+var sp = new SerialPort({
+  path: argv.serial,
   baudRate: argv.baudRate,
 });
 
@@ -173,7 +174,7 @@ if (twitch)
     argv: argv
   });
 
-var parser = sp.pipe(new Readline({delimeter: '\n'}));
+var parser = sp.pipe(new ReadlineParser({delimeter: '\n'}));
 
 function shuffle (array) {
   var i = 0
