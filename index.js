@@ -145,6 +145,10 @@ const argv = yargs.option('serial', {
   }).option('crash-timeout', {
     alias: 't',
     default: 60 * 1000,
+  }).option('clear', {
+    default: true,
+  }).option('power', {
+    default: true,
   });
 }, (argv) => {
 }).argv;
@@ -213,7 +217,7 @@ function chooseFile() {
       log('log', 'Randomized file list');
     }
   }
-  if (!ranClear && srcArray.length) {
+  if (!ranClear && srcArray.length && argv.clear) {
     ranClear = true;
     return "clear.m64";
   } else {
@@ -231,16 +235,17 @@ function openFile(file) {
 }
 
 function power(on) {
-  sp.write('PW:' + (on ? 1 : 0) + ':' + argv.powerPin + '\n');
+  if (argv.power)
+    sp.write('PW:' + (on ? 1 : 0) + ':' + argv.powerPin + '\n');
 }
 
 function loadNext() {
-  power(false);
   var next = chooseFile();
   if (!next) {
     console.log('Finished running all files');
     process.exit(0);
   }
+  power(false);
   setTimeout(function () {
     openFile(next);
   }, 1000);
