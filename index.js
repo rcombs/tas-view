@@ -1,6 +1,6 @@
 #! /usr/bin/env node
 
-const { SerialPort, ReadlineParser } = require('serialport')
+const { SerialPort, ReadlineParser } = require('serialport-rs')
 
 var fs = require('fs'),
     express = require('express'),
