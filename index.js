@@ -105,6 +105,8 @@ const argv = yargs.option('serial', {
     dstPath = argv.dstPath;
   else
     dstPath = '/' + path.basename(argv.srcFile);
+}).command('reboot', 'reboot the board', () => {}, () => {
+  startupString += 'RB:\n';
 }).command(['list [path]', 'ls'], 'list contents of directory', (yargs) => {
   yargs.positional('path', {
     describe: 'directory to list',
